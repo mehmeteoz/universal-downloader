@@ -26,6 +26,9 @@ export default function App() {
   
   const [videoRes, setVideoRes] = useState<string>('');
   const [audioKbps, setAudioKbps] = useState<string>('');
+  
+  const [isDownloading, setIsDownloading] = useState<boolean>(false);
+  const [downloadProgress, setDownloadProgress] = useState<string>('');
 
   const fetchInfo = async () => {
     if (!url) return;
@@ -65,12 +68,52 @@ export default function App() {
     }
   };
 
-  const handleDownload = () => {
-    let downloadUrl = `/api/download?url=${encodeURIComponent(url)}&mediaType=${mediaType}&ext=${ext}&videoRes=${videoRes}&audioKbps=${audioKbps}`;
-    if (info?.title) {
-      downloadUrl += `&title=${encodeURIComponent(info.title)}`;
+  const handleDownload = async () => {
+    setIsDownloading(true);
+    setDownloadProgress('Preparing...');
+    setError('');
+
+    try {
+      const res = await fetch('/api/prepare', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          url, mediaType, ext, videoRes, audioKbps, title: info?.title 
+        })
+      });
+
+      if (!res.ok) throw new Error('Failed to prepare download');
+      const { taskId } = await res.json();
+
+      const interval = setInterval(async () => {
+        try {
+          const statusRes = await fetch(`/api/status/${taskId}`);
+          if (statusRes.ok) {
+            const data = await statusRes.json();
+            setDownloadProgress(data.progress);
+            
+            if (data.status === 'done') {
+              clearInterval(interval);
+              setIsDownloading(false);
+              setDownloadProgress('');
+              // Trigger the actual file download
+              window.location.href = `/api/download/${taskId}`;
+            } else if (data.status === 'error') {
+              clearInterval(interval);
+              setIsDownloading(false);
+              setDownloadProgress('');
+              setError('Server failed to process the media.');
+            }
+          }
+        } catch (e) {
+          // Ignore polling errors
+        }
+      }, 1000);
+    } catch (err) {
+      setIsDownloading(false);
+      setDownloadProgress('');
+      setError('Failed to initiate download.');
     }
-    window.open(downloadUrl, '_blank');
   };
 
   const downloadThumbnail = () => {
@@ -95,7 +138,7 @@ export default function App() {
             onChange={(e: React.ChangeEvent<HTMLInputElement>) => setUrl(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && fetchInfo()}
           />
-          <button className="btn" onClick={fetchInfo} disabled={loading || !url}>
+          <button className="btn" onClick={fetchInfo} disabled={loading || isDownloading || !url}>
             {loading ? 'Checking...' : <><Search size={18} /> Inspect</>}
           </button>
         </div>
@@ -151,6 +194,7 @@ export default function App() {
                   type="radio" 
                   value="video" 
                   checked={mediaType === 'video'} 
+                  disabled={isDownloading}
                   onChange={() => {
                     setMediaType('video');
                     setExt('mp4');
@@ -163,6 +207,7 @@ export default function App() {
                   type="radio" 
                   value="audio" 
                   checked={mediaType === 'audio'} 
+                  disabled={isDownloading}
                   onChange={() => {
                     setMediaType('audio');
                     setExt('mp3');
@@ -179,6 +224,7 @@ export default function App() {
               <select 
                 className="input" 
                 value={ext} 
+                disabled={isDownloading}
                 onChange={e => setExt(e.target.value)}
                 style={{ width: '100%', cursor: 'pointer' }}
               >
@@ -196,6 +242,7 @@ export default function App() {
                   <select 
                     className="input" 
                     value={videoRes} 
+                    disabled={isDownloading}
                     onChange={e => setVideoRes(e.target.value)}
                     style={{ width: '100%', cursor: 'pointer' }}
                   >
@@ -211,6 +258,7 @@ export default function App() {
                   <select 
                     className="input" 
                     value={audioKbps} 
+                    disabled={isDownloading}
                     onChange={e => setAudioKbps(e.target.value)}
                     style={{ width: '100%', cursor: 'pointer' }}
                   >
@@ -226,9 +274,30 @@ export default function App() {
           </div>
 
           <div className="actions">
-            <button className="btn" onClick={handleDownload}>
-              <Download size={20} /> Download {ext.toUpperCase()}
-            </button>
+            {(() => {
+              let progressPercent = 0;
+              if (downloadProgress.includes('Merging') || downloadProgress.includes('Extracting')) {
+                progressPercent = 100;
+              } else {
+                const match = downloadProgress.match(/([\d\.]+)%/);
+                if (match) progressPercent = parseFloat(match[1]);
+              }
+              
+              return (
+                <button 
+                  className={`btn ${isDownloading ? 'downloading' : ''}`} 
+                  onClick={handleDownload} 
+                  disabled={isDownloading}
+                  style={isDownloading ? { '--progress': `${progressPercent}%` } as React.CSSProperties : {}}
+                >
+                  {isDownloading ? (
+                    <span>{downloadProgress || 'Downloading...'}</span>
+                  ) : (
+                    <><Download size={20} /> Download {ext.toUpperCase()}</>
+                  )}
+                </button>
+              );
+            })()}
           </div>
         </div>
       )}

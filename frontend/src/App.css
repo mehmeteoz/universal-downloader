@@ -101,6 +101,26 @@ body {
   cursor: not-allowed;
 }
 
+.btn.downloading {
+  position: relative;
+  overflow: hidden;
+  opacity: 1 !important;
+  background: rgba(59, 130, 246, 0.4) !important;
+  z-index: 1;
+}
+
+.btn.downloading::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  width: var(--progress, 0%);
+  background-color: var(--primary);
+  z-index: -1;
+  transition: width 0.8s ease-out;
+}
+
 .error {
   background-color: #fef2f2;
   color: var(--danger);

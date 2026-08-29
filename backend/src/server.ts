@@ -60,77 +60,104 @@ app.post('/api/info', (req: Request<{}, {}, InfoRequestBody>, res: Response) => 
   });
 });
 
-// 2. Download audio or video (using temp file to ensure proper muxing/headers)
-app.get('/api/download', (req: Request, res: Response) => {
-  const url = req.query.url as string;
-  const mediaType = req.query.mediaType as string; // 'video' or 'audio'
-  const ext = req.query.ext as string; // e.g. 'mp4', 'webm', 'mp3', 'wav'
-  const videoRes = req.query.videoRes as string;
-  const audioKbps = req.query.audioKbps as string;
-  const title = req.query.title as string;
-  
+const tasks = new Map<string, {
+  status: 'processing' | 'done' | 'error';
+  progress: string;
+  file?: string;
+  filename?: string;
+}>();
+
+// 2. Prepare download (starts background task)
+app.post('/api/prepare', (req: Request, res: Response) => {
+  const { url, mediaType, ext, videoRes, audioKbps, title } = req.body;
   if (!url) {
     res.status(400).send('URL is required');
     return;
   }
 
-  const tmpId = require('crypto').randomBytes(16).toString('hex');
-  const tmpFile = require('path').join(require('os').tmpdir(), `dl-${tmpId}.${ext}`);
+  const taskId = require('crypto').randomBytes(16).toString('hex');
+  const tmpFile = require('path').join(require('os').tmpdir(), `dl-${taskId}.${ext}`);
+
+  tasks.set(taskId, { status: 'processing', progress: 'Starting download...' });
+  res.json({ taskId });
 
   let args: string[] = [];
 
   if (mediaType === 'audio') {
     const audioQuality = audioKbps ? `${audioKbps}K` : '0';
-
-    args = [
-      '-x',
-      '--audio-format', ext,
-      '--audio-quality', audioQuality,
-      '-o', tmpFile, 
-      url
-    ];
+    args = [ '--newline', '-x', '--audio-format', ext, '--audio-quality', audioQuality, '-o', tmpFile, url ];
   } else {
     let videoFormat = `bestvideo[ext=${ext}]+bestaudio/best[ext=${ext}]/best`;
     if (videoRes) {
       videoFormat = `bestvideo[ext=${ext}][height<=${videoRes}]+bestaudio/best[ext=${ext}][height<=${videoRes}]/best`;
     }
-
-    args = [
-      '-f', videoFormat,
-      '--merge-output-format', ext,
-      '-o', tmpFile, 
-      url
-    ];
+    args = [ '--newline', '-f', videoFormat, '--merge-output-format', ext, '-o', tmpFile, url ];
   }
 
   const ytdlp = spawn('yt-dlp', args);
-  let errorOutput = '';
+
+  ytdlp.stdout.on('data', (data: Buffer) => {
+    const output = data.toString();
+    const task = tasks.get(taskId);
+    if (!task) return;
+    
+    // Parse progress like: [download]  50.0% of ~10.00MiB
+    const match = output.match(/\[download\]\s+([\d\.]+)%/);
+    if (match) {
+      task.progress = `Downloading... ${match[1]}%`;
+    } else if (output.includes('[Merger]')) {
+      task.progress = 'Merging video and audio...';
+    } else if (output.includes('[ExtractAudio]')) {
+      task.progress = 'Extracting audio...';
+    }
+  });
 
   ytdlp.stderr.on('data', (data: Buffer) => {
-    errorOutput += data.toString();
     console.error(`yt-dlp stderr: ${data}`);
   });
 
   ytdlp.on('close', (code) => {
+    const task = tasks.get(taskId);
+    if (!task) return;
+
     if (code === 0) {
       let filename = mediaType === 'audio' ? `audio.${ext}` : `video.${ext}`;
       if (title) {
         const safeTitle = title.replace(/[/\\?%*:|"<>]/g, '-').trim();
         if (safeTitle) filename = `${safeTitle}.${ext}`;
       }
-
-      res.download(tmpFile, filename, (err) => {
-        require('fs').unlink(tmpFile, () => {});
-      });
+      task.status = 'done';
+      task.file = tmpFile;
+      task.filename = filename;
+      task.progress = 'Complete!';
     } else {
-      res.status(500).send('Error downloading media');
+      task.status = 'error';
+      task.progress = 'Error processing media.';
     }
   });
+});
 
-  req.on('close', () => {
-    // If client disconnects early, kill process and clean up
-    ytdlp.kill('SIGKILL');
-    setTimeout(() => require('fs').unlink(tmpFile, () => {}), 1000);
+// 3. Get task status
+app.get('/api/status/:taskId', (req: Request, res: Response) => {
+  const task = tasks.get(req.params.taskId);
+  if (!task) {
+    res.status(404).json({ error: 'Task not found' });
+    return;
+  }
+  res.json({ status: task.status, progress: task.progress });
+});
+
+// 4. Download finished file
+app.get('/api/download/:taskId', (req: Request, res: Response) => {
+  const task = tasks.get(req.params.taskId);
+  if (!task || task.status !== 'done' || !task.file) {
+    res.status(400).send('File not ready or not found');
+    return;
+  }
+
+  res.download(task.file, task.filename || 'download', (err) => {
+    require('fs').unlink(task.file, () => {});
+    tasks.delete(req.params.taskId);
   });
 });
 
