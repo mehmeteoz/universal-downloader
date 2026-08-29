@@ -67,6 +67,7 @@ app.get('/api/download', (req: Request, res: Response) => {
   const ext = req.query.ext as string; // e.g. 'mp4', 'webm', 'mp3', 'wav'
   const videoRes = req.query.videoRes as string;
   const audioKbps = req.query.audioKbps as string;
+  const title = req.query.title as string;
   
   if (!url) {
     res.status(400).send('URL is required');
@@ -112,7 +113,12 @@ app.get('/api/download', (req: Request, res: Response) => {
 
   ytdlp.on('close', (code) => {
     if (code === 0) {
-      const filename = mediaType === 'audio' ? `audio.${ext}` : `video.${ext}`;
+      let filename = mediaType === 'audio' ? `audio.${ext}` : `video.${ext}`;
+      if (title) {
+        const safeTitle = title.replace(/[/\\?%*:|"<>]/g, '-').trim();
+        if (safeTitle) filename = `${safeTitle}.${ext}`;
+      }
+
       res.download(tmpFile, filename, (err) => {
         require('fs').unlink(tmpFile, () => {});
       });

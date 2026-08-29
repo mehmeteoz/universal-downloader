@@ -66,7 +66,10 @@ export default function App() {
   };
 
   const handleDownload = () => {
-    const downloadUrl = `/api/download?url=${encodeURIComponent(url)}&mediaType=${mediaType}&ext=${ext}&videoRes=${videoRes}&audioKbps=${audioKbps}`;
+    let downloadUrl = `/api/download?url=${encodeURIComponent(url)}&mediaType=${mediaType}&ext=${ext}&videoRes=${videoRes}&audioKbps=${audioKbps}`;
+    if (info?.title) {
+      downloadUrl += `&title=${encodeURIComponent(info.title)}`;
+    }
     window.open(downloadUrl, '_blank');
   };
 
