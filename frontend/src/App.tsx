@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Download, Search, AlertCircle, FileVideo, FileAudio, Clock, Image as ImageIcon } from 'lucide-react';
 import './App.css';
 
@@ -29,6 +29,64 @@ export default function App() {
   
   const [isDownloading, setIsDownloading] = useState<boolean>(false);
   const [downloadProgress, setDownloadProgress] = useState<string>('');
+
+  useEffect(() => {
+    const active = localStorage.getItem('activeDownload');
+    if (active) {
+      try {
+        const data = JSON.parse(active);
+        
+        setUrl(data.url);
+        setMediaType(data.mediaType);
+        setExt(data.ext);
+        if (data.videoRes) setVideoRes(data.videoRes);
+        if (data.audioKbps) setAudioKbps(data.audioKbps);
+        setIsDownloading(true);
+        setDownloadProgress('Resuming...');
+        
+        fetch('/api/info', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: data.url })
+        }).then(res => res.json()).then(infoData => {
+          if (!infoData.error) setInfo(infoData);
+        }).catch(() => {});
+
+        const interval = setInterval(async () => {
+          try {
+            const statusRes = await fetch(`/api/status/${data.taskId}`);
+            if (statusRes.ok) {
+              const statusData = await statusRes.json();
+              setDownloadProgress(statusData.progress);
+              
+              if (statusData.status === 'done') {
+                clearInterval(interval);
+                setIsDownloading(false);
+                setDownloadProgress('');
+                localStorage.removeItem('activeDownload');
+                window.location.href = `/api/download/${data.taskId}`;
+              } else if (statusData.status === 'error') {
+                clearInterval(interval);
+                setIsDownloading(false);
+                setDownloadProgress('');
+                setError('Server failed to process the media.');
+                localStorage.removeItem('activeDownload');
+              }
+            } else if (statusRes.status === 404) {
+              clearInterval(interval);
+              setIsDownloading(false);
+              setDownloadProgress('');
+              localStorage.removeItem('activeDownload');
+            }
+          } catch (e) {
+            // Ignore polling errors
+          }
+        }, 1000);
+      } catch (e) {
+        localStorage.removeItem('activeDownload');
+      }
+    }
+  }, []);
 
   const fetchInfo = async () => {
     if (!url) return;
@@ -85,6 +143,10 @@ export default function App() {
       if (!res.ok) throw new Error('Failed to prepare download');
       const { taskId } = await res.json();
 
+      localStorage.setItem('activeDownload', JSON.stringify({
+        taskId, url, mediaType, ext, videoRes, audioKbps
+      }));
+
       const interval = setInterval(async () => {
         try {
           const statusRes = await fetch(`/api/status/${taskId}`);
@@ -96,13 +158,14 @@ export default function App() {
               clearInterval(interval);
               setIsDownloading(false);
               setDownloadProgress('');
-              // Trigger the actual file download
+              localStorage.removeItem('activeDownload');
               window.location.href = `/api/download/${taskId}`;
             } else if (data.status === 'error') {
               clearInterval(interval);
               setIsDownloading(false);
               setDownloadProgress('');
               setError('Server failed to process the media.');
+              localStorage.removeItem('activeDownload');
             }
           }
         } catch (e) {
