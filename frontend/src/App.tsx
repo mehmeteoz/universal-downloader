@@ -281,7 +281,7 @@ export default function App() {
             </div>
           </div>
 
-          <div style={{ display: 'flex', gap: '12px' }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px' }}>
             <div className="options-group" style={{ flex: 1 }}>
               <h4>Format ({mediaType})</h4>
               <select 
@@ -310,7 +310,7 @@ export default function App() {
                     style={{ width: '100%', cursor: 'pointer' }}
                   >
                     {info.videoFormats.map(res => (
-                      <option key={res} value={res}>{res}p (or lower)</option>
+                      <option key={res} value={res}>{res}p</option>
                     ))}
                   </select>
                 ) : (
