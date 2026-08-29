@@ -60,7 +60,7 @@ app.post('/api/info', (req: Request<{}, {}, InfoRequestBody>, res: Response) => 
   });
 });
 
-// 2. Stream audio or video download
+// 2. Download audio or video (using temp file to ensure proper muxing/headers)
 app.get('/api/download', (req: Request, res: Response) => {
   const url = req.query.url as string;
   const mediaType = req.query.mediaType as string; // 'video' or 'audio'
@@ -73,36 +73,22 @@ app.get('/api/download', (req: Request, res: Response) => {
     return;
   }
 
+  const tmpId = require('crypto').randomBytes(16).toString('hex');
+  const tmpFile = require('path').join(require('os').tmpdir(), `dl-${tmpId}.${ext}`);
+
   let args: string[] = [];
 
   if (mediaType === 'audio') {
-    res.header('Content-Disposition', `attachment; filename="audio.${ext}"`);
-    let contentType = 'audio/mpeg';
-    if (ext === 'm4a') contentType = 'audio/mp4';
-    else if (ext === 'wav') contentType = 'audio/wav';
-    else if (ext === 'flac') contentType = 'audio/flac';
-    else if (ext === 'aac') contentType = 'audio/aac';
-    else if (ext === 'opus') contentType = 'audio/opus';
-    else if (ext === 'vorbis') contentType = 'audio/ogg';
-    res.header('Content-Type', contentType);
-    
-    // yt-dlp allows specifying bitrate directly for audio quality, e.g. 128K
     const audioQuality = audioKbps ? `${audioKbps}K` : '0';
 
     args = [
       '-x',
       '--audio-format', ext,
       '--audio-quality', audioQuality,
-      '-o', '-', 
+      '-o', tmpFile, 
       url
     ];
   } else {
-    res.header('Content-Disposition', `attachment; filename="video.${ext}"`);
-    let contentType = 'video/mp4';
-    if (ext === 'webm') contentType = 'video/webm';
-    else if (ext === 'mkv') contentType = 'video/x-matroska';
-    res.header('Content-Type', contentType);
-
     let videoFormat = `bestvideo[ext=${ext}]+bestaudio/best[ext=${ext}]/best`;
     if (videoRes) {
       videoFormat = `bestvideo[ext=${ext}][height<=${videoRes}]+bestaudio/best[ext=${ext}][height<=${videoRes}]/best`;
@@ -111,21 +97,34 @@ app.get('/api/download', (req: Request, res: Response) => {
     args = [
       '-f', videoFormat,
       '--merge-output-format', ext,
-      '-o', '-', 
+      '-o', tmpFile, 
       url
     ];
   }
 
   const ytdlp = spawn('yt-dlp', args);
-
-  ytdlp.stdout.pipe(res);
+  let errorOutput = '';
 
   ytdlp.stderr.on('data', (data: Buffer) => {
+    errorOutput += data.toString();
     console.error(`yt-dlp stderr: ${data}`);
   });
 
+  ytdlp.on('close', (code) => {
+    if (code === 0) {
+      const filename = mediaType === 'audio' ? `audio.${ext}` : `video.${ext}`;
+      res.download(tmpFile, filename, (err) => {
+        require('fs').unlink(tmpFile, () => {});
+      });
+    } else {
+      res.status(500).send('Error downloading media');
+    }
+  });
+
   req.on('close', () => {
+    // If client disconnects early, kill process and clean up
     ytdlp.kill('SIGKILL');
+    setTimeout(() => require('fs').unlink(tmpFile, () => {}), 1000);
   });
 });
 
