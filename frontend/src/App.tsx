@@ -11,11 +11,15 @@ interface MediaInfo {
   audioFormats: number[];
 }
 
-type FormatType = 'mp4' | 'mp3';
+type MediaType = 'video' | 'audio';
+
+const VIDEO_EXTS = ['mp4', 'webm', 'mkv'];
+const AUDIO_EXTS = ['mp3', 'm4a', 'wav', 'flac'];
 
 export default function App() {
   const [url, setUrl] = useState<string>('');
-  const [format, setFormat] = useState<FormatType>('mp4');
+  const [mediaType, setMediaType] = useState<MediaType>('video');
+  const [ext, setExt] = useState<string>('mp4');
   const [info, setInfo] = useState<MediaInfo | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string>('');
@@ -62,7 +66,7 @@ export default function App() {
   };
 
   const handleDownload = () => {
-    const downloadUrl = `/api/download?url=${encodeURIComponent(url)}&format=${format}&videoRes=${videoRes}&audioKbps=${audioKbps}`;
+    const downloadUrl = `/api/download?url=${encodeURIComponent(url)}&mediaType=${mediaType}&ext=${ext}&videoRes=${videoRes}&audioKbps=${audioKbps}`;
     window.open(downloadUrl, '_blank');
   };
 
@@ -137,67 +141,90 @@ export default function App() {
           </div>
 
           <div className="options-group">
-            <h4>Format</h4>
+            <h4>Media Type</h4>
             <div className="radio-group">
               <label className="radio-label">
                 <input 
                   type="radio" 
-                  value="mp4" 
-                  checked={format === 'mp4'} 
-                  onChange={() => setFormat('mp4')} 
+                  value="video" 
+                  checked={mediaType === 'video'} 
+                  onChange={() => {
+                    setMediaType('video');
+                    setExt('mp4');
+                  }} 
                 />
-                <FileVideo size={18} /> MP4 Video
+                <FileVideo size={18} /> Video
               </label>
               <label className="radio-label">
                 <input 
                   type="radio" 
-                  value="mp3" 
-                  checked={format === 'mp3'} 
-                  onChange={() => setFormat('mp3')} 
+                  value="audio" 
+                  checked={mediaType === 'audio'} 
+                  onChange={() => {
+                    setMediaType('audio');
+                    setExt('mp3');
+                  }} 
                 />
-                <FileAudio size={18} /> MP3 Audio
+                <FileAudio size={18} /> Audio
               </label>
             </div>
           </div>
 
-          <div className="options-group">
-            <h4>Quality Selection</h4>
-            {format === 'mp4' ? (
-              info.videoFormats && info.videoFormats.length > 0 ? (
-                <select 
-                  className="input" 
-                  value={videoRes} 
-                  onChange={e => setVideoRes(e.target.value)}
-                  style={{ width: '100%', cursor: 'pointer' }}
-                >
-                  {info.videoFormats.map(res => (
-                    <option key={res} value={res}>{res}p (or lower)</option>
-                  ))}
-                </select>
+          <div style={{ display: 'flex', gap: '12px' }}>
+            <div className="options-group" style={{ flex: 1 }}>
+              <h4>Format ({mediaType})</h4>
+              <select 
+                className="input" 
+                value={ext} 
+                onChange={e => setExt(e.target.value)}
+                style={{ width: '100%', cursor: 'pointer' }}
+              >
+                {mediaType === 'video' 
+                  ? VIDEO_EXTS.map(e => <option key={e} value={e}>.{e}</option>)
+                  : AUDIO_EXTS.map(e => <option key={e} value={e}>.{e}</option>)
+                }
+              </select>
+            </div>
+
+            <div className="options-group" style={{ flex: 1 }}>
+              <h4>Quality Selection</h4>
+              {mediaType === 'video' ? (
+                info.videoFormats && info.videoFormats.length > 0 ? (
+                  <select 
+                    className="input" 
+                    value={videoRes} 
+                    onChange={e => setVideoRes(e.target.value)}
+                    style={{ width: '100%', cursor: 'pointer' }}
+                  >
+                    {info.videoFormats.map(res => (
+                      <option key={res} value={res}>{res}p (or lower)</option>
+                    ))}
+                  </select>
+                ) : (
+                  <p style={{ margin: 0, fontSize: '0.9rem', color: '#666', padding: '12px 0' }}>Best available</p>
+                )
               ) : (
-                <p style={{ margin: 0, fontSize: '0.9rem', color: '#666' }}>No specific resolutions found. Will download best available.</p>
-              )
-            ) : (
-              info.audioFormats && info.audioFormats.length > 0 ? (
-                <select 
-                  className="input" 
-                  value={audioKbps} 
-                  onChange={e => setAudioKbps(e.target.value)}
-                  style={{ width: '100%', cursor: 'pointer' }}
-                >
-                  {info.audioFormats.map(kbps => (
-                    <option key={kbps} value={kbps}>{kbps} kbps</option>
-                  ))}
-                </select>
-              ) : (
-                <p style={{ margin: 0, fontSize: '0.9rem', color: '#666' }}>No specific audio bitrates found. Will download best available.</p>
-              )
-            )}
+                info.audioFormats && info.audioFormats.length > 0 ? (
+                  <select 
+                    className="input" 
+                    value={audioKbps} 
+                    onChange={e => setAudioKbps(e.target.value)}
+                    style={{ width: '100%', cursor: 'pointer' }}
+                  >
+                    {info.audioFormats.map(kbps => (
+                      <option key={kbps} value={kbps}>{kbps} kbps</option>
+                    ))}
+                  </select>
+                ) : (
+                  <p style={{ margin: 0, fontSize: '0.9rem', color: '#666', padding: '12px 0' }}>Best available</p>
+                )
+              )}
+            </div>
           </div>
 
           <div className="actions">
             <button className="btn" onClick={handleDownload}>
-              <Download size={20} /> Download {format.toUpperCase()}
+              <Download size={20} /> Download {ext.toUpperCase()}
             </button>
           </div>
         </div>

@@ -63,7 +63,8 @@ app.post('/api/info', (req: Request<{}, {}, InfoRequestBody>, res: Response) => 
 // 2. Stream audio or video download
 app.get('/api/download', (req: Request, res: Response) => {
   const url = req.query.url as string;
-  const format = req.query.format as string;
+  const mediaType = req.query.mediaType as string; // 'video' or 'audio'
+  const ext = req.query.ext as string; // e.g. 'mp4', 'webm', 'mp3', 'wav'
   const videoRes = req.query.videoRes as string;
   const audioKbps = req.query.audioKbps as string;
   
@@ -74,32 +75,42 @@ app.get('/api/download', (req: Request, res: Response) => {
 
   let args: string[] = [];
 
-  if (format === 'mp3') {
-    res.header('Content-Disposition', 'attachment; filename="audio.mp3"');
-    res.header('Content-Type', 'audio/mpeg');
+  if (mediaType === 'audio') {
+    res.header('Content-Disposition', `attachment; filename="audio.${ext}"`);
+    let contentType = 'audio/mpeg';
+    if (ext === 'm4a') contentType = 'audio/mp4';
+    else if (ext === 'wav') contentType = 'audio/wav';
+    else if (ext === 'flac') contentType = 'audio/flac';
+    else if (ext === 'aac') contentType = 'audio/aac';
+    else if (ext === 'opus') contentType = 'audio/opus';
+    else if (ext === 'vorbis') contentType = 'audio/ogg';
+    res.header('Content-Type', contentType);
     
     // yt-dlp allows specifying bitrate directly for audio quality, e.g. 128K
     const audioQuality = audioKbps ? `${audioKbps}K` : '0';
 
     args = [
       '-x',
-      '--audio-format', 'mp3',
+      '--audio-format', ext,
       '--audio-quality', audioQuality,
       '-o', '-', 
       url
     ];
   } else {
-    res.header('Content-Disposition', 'attachment; filename="video.mp4"');
-    res.header('Content-Type', 'video/mp4');
+    res.header('Content-Disposition', `attachment; filename="video.${ext}"`);
+    let contentType = 'video/mp4';
+    if (ext === 'webm') contentType = 'video/webm';
+    else if (ext === 'mkv') contentType = 'video/x-matroska';
+    res.header('Content-Type', contentType);
 
-    let videoFormat = 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best';
+    let videoFormat = `bestvideo[ext=${ext}]+bestaudio/best[ext=${ext}]/best`;
     if (videoRes) {
-      videoFormat = `bestvideo[ext=mp4][height<=${videoRes}]+bestaudio[ext=m4a]/best[ext=mp4][height<=${videoRes}]/best`;
+      videoFormat = `bestvideo[ext=${ext}][height<=${videoRes}]+bestaudio/best[ext=${ext}][height<=${videoRes}]/best`;
     }
 
     args = [
       '-f', videoFormat,
-      '--merge-output-format', 'mp4',
+      '--merge-output-format', ext,
       '-o', '-', 
       url
     ];
