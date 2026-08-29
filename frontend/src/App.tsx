@@ -44,7 +44,7 @@ export default function App() {
         setIsDownloading(true);
         setDownloadProgress('Resuming...');
         
-        fetch('/api/info', {
+        fetch('/udownloader/api/info', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ url: data.url })
@@ -54,7 +54,7 @@ export default function App() {
 
         const interval = setInterval(async () => {
           try {
-            const statusRes = await fetch(`/api/status/${data.taskId}`);
+            const statusRes = await fetch(`/udownloader/api/status/${data.taskId}`);
             if (statusRes.ok) {
               const statusData = await statusRes.json();
               setDownloadProgress(statusData.progress);
@@ -64,7 +64,7 @@ export default function App() {
                 setIsDownloading(false);
                 setDownloadProgress('');
                 localStorage.removeItem('activeDownload');
-                window.location.href = `/api/download/${data.taskId}`;
+                window.location.href = `/udownloader/api/download/${data.taskId}`;
               } else if (statusData.status === 'error') {
                 clearInterval(interval);
                 setIsDownloading(false);
@@ -95,7 +95,7 @@ export default function App() {
     setInfo(null);
     
     try {
-      const res = await fetch('/api/info', {
+      const res = await fetch('/udownloader/api/info', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url })
@@ -132,7 +132,7 @@ export default function App() {
     setError('');
 
     try {
-      const res = await fetch('/api/prepare', {
+      const res = await fetch('/udownloader/api/prepare', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
@@ -149,7 +149,7 @@ export default function App() {
 
       const interval = setInterval(async () => {
         try {
-          const statusRes = await fetch(`/api/status/${taskId}`);
+          const statusRes = await fetch(`/udownloader/api/status/${taskId}`);
           if (statusRes.ok) {
             const data = await statusRes.json();
             setDownloadProgress(data.progress);
@@ -159,7 +159,7 @@ export default function App() {
               setIsDownloading(false);
               setDownloadProgress('');
               localStorage.removeItem('activeDownload');
-              window.location.href = `/api/download/${taskId}`;
+              window.location.href = `/udownloader/api/download/${taskId}`;
             } else if (data.status === 'error') {
               clearInterval(interval);
               setIsDownloading(false);
