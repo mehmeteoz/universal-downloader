@@ -364,6 +364,15 @@ export default function App() {
           </div>
         </div>
       )}
+
+      <footer style={{ textAlign: 'center', marginTop: '40px', paddingTop: '24px', color: 'var(--text-secondary)', fontSize: '0.85rem', borderTop: '1px solid var(--border)' }}>
+        <p style={{ margin: '0 0 8px 0', lineHeight: '1.5' }}>
+          <strong>Terms of Use:</strong> This tool is provided for educational and personal use only. Users are strictly prohibited from downloading copyrighted material without explicit permission from the copyright owner. We do not permanently store, cache, or host any downloaded content on our servers.
+        </p>
+        <p style={{ margin: 0 }}>
+          <strong>DMCA & Legal Inquiries:</strong> <a href="mailto:ozmehmet1919@gmail.com" style={{ color: 'var(--primary)', textDecoration: 'none' }}>ozmehmet1919@gmail.com</a>
+        </p>
+      </footer>
     </div>
   );
 }
