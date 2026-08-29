@@ -85,13 +85,13 @@ app.post('/api/prepare', (req: Request, res: Response) => {
 
   if (mediaType === 'audio') {
     const audioQuality = audioKbps ? `${audioKbps}K` : '0';
-    args = [ '--newline', '-x', '--audio-format', ext, '--audio-quality', audioQuality, '-o', tmpFile, url ];
+    args = [ '--newline', '--embed-metadata', '--embed-thumbnail', '-x', '--audio-format', ext, '--audio-quality', audioQuality, '-o', tmpFile, url ];
   } else {
     let videoFormat = `bestvideo[ext=${ext}]+bestaudio/best[ext=${ext}]/best`;
     if (videoRes) {
       videoFormat = `bestvideo[ext=${ext}][height<=${videoRes}]+bestaudio/best[ext=${ext}][height<=${videoRes}]/best`;
     }
-    args = [ '--newline', '-f', videoFormat, '--merge-output-format', ext, '-o', tmpFile, url ];
+    args = [ '--newline', '--embed-metadata', '--embed-thumbnail', '-f', videoFormat, '--merge-output-format', ext, '-o', tmpFile, url ];
   }
 
   const ytdlp = spawn('yt-dlp', args);
