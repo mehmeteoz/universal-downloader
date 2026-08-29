@@ -251,7 +251,7 @@ export default function App() {
                     ))}
                   </select>
                 ) : (
-                  <p style={{ margin: 0, fontSize: '0.9rem', color: '#666', padding: '12px 0' }}>Best available</p>
+                  <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--text-secondary)', padding: '12px 0' }}>Best available</p>
                 )
               ) : (
                 info.audioFormats && info.audioFormats.length > 0 ? (
@@ -267,7 +267,7 @@ export default function App() {
                     ))}
                   </select>
                 ) : (
-                  <p style={{ margin: 0, fontSize: '0.9rem', color: '#666', padding: '12px 0' }}>Best available</p>
+                  <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--text-secondary)', padding: '12px 0' }}>Best available</p>
                 )
               )}
             </div>
