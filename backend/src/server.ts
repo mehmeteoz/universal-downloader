@@ -69,7 +69,7 @@ const tasks = new Map<string, {
 
 // 2. Prepare download (starts background task)
 app.post('/api/prepare', (req: Request, res: Response) => {
-  const { url, mediaType, ext, videoRes, audioKbps, title } = req.body;
+  const { url, mediaType, ext, videoRes, audioKbps, title, startTime, endTime } = req.body;
   if (!url) {
     res.status(400).send('URL is required');
     return;
@@ -92,6 +92,12 @@ app.post('/api/prepare', (req: Request, res: Response) => {
       videoFormat = `bestvideo[ext=${ext}][height<=${videoRes}]+bestaudio/best[ext=${ext}][height<=${videoRes}]/best`;
     }
     args = [ '--newline', '--embed-metadata', '--embed-thumbnail', '-f', videoFormat, '--merge-output-format', ext, '-o', tmpFile, url ];
+  }
+
+  if (startTime || endTime) {
+    const start = startTime || '0';
+    const end = endTime || 'inf';
+    args.push('--download-sections', `*${start}-${end}`);
   }
 
   const ytdlp = spawn('yt-dlp', args);

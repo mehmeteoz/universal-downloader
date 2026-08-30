@@ -26,6 +26,8 @@ export default function App() {
   
   const [videoRes, setVideoRes] = useState<string>('');
   const [audioKbps, setAudioKbps] = useState<string>('');
+  const [startTime, setStartTime] = useState<string>('');
+  const [endTime, setEndTime] = useState<string>('');
   
   const [isDownloading, setIsDownloading] = useState<boolean>(false);
   const [downloadProgress, setDownloadProgress] = useState<string>('');
@@ -41,6 +43,8 @@ export default function App() {
         setExt(data.ext);
         if (data.videoRes) setVideoRes(data.videoRes);
         if (data.audioKbps) setAudioKbps(data.audioKbps);
+        if (data.startTime) setStartTime(data.startTime);
+        if (data.endTime) setEndTime(data.endTime);
         setIsDownloading(true);
         setDownloadProgress('Resuming...');
         
@@ -136,7 +140,7 @@ export default function App() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
-          url, mediaType, ext, videoRes, audioKbps, title: info?.title 
+          url, mediaType, ext, videoRes, audioKbps, title: info?.title, startTime, endTime
         })
       });
 
@@ -144,7 +148,7 @@ export default function App() {
       const { taskId } = await res.json();
 
       localStorage.setItem('activeDownload', JSON.stringify({
-        taskId, url, mediaType, ext, videoRes, audioKbps
+        taskId, url, mediaType, ext, videoRes, audioKbps, startTime, endTime
       }));
 
       const interval = setInterval(async () => {
@@ -333,6 +337,33 @@ export default function App() {
                   <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--text-secondary)', padding: '12px 0' }}>Best available</p>
                 )
               )}
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px' }}>
+            <div className="options-group" style={{ flex: 1 }}>
+              <h4>Start Time (Optional)</h4>
+              <input
+                type="text"
+                className="input"
+                placeholder="00:00:00 or seconds"
+                value={startTime}
+                onChange={e => setStartTime(e.target.value)}
+                disabled={isDownloading}
+                style={{ width: '100%' }}
+              />
+            </div>
+            <div className="options-group" style={{ flex: 1 }}>
+              <h4>End Time (Optional)</h4>
+              <input
+                type="text"
+                className="input"
+                placeholder="00:00:00 or seconds"
+                value={endTime}
+                onChange={e => setEndTime(e.target.value)}
+                disabled={isDownloading}
+                style={{ width: '100%' }}
+              />
             </div>
           </div>
 
