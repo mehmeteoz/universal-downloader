@@ -16,6 +16,29 @@ type MediaType = 'video' | 'audio';
 const VIDEO_EXTS = ['mp4', 'webm', 'mkv'];
 const AUDIO_EXTS = ['mp3', 'm4a', 'wav', 'flac'];
 
+const parseToSeconds = (timeStr: string) => {
+  if (!timeStr) return 0;
+  if (!isNaN(Number(timeStr))) return Number(timeStr);
+  const parts = timeStr.split(':').reverse();
+  let secs = 0;
+  for (let i = 0; i < parts.length; i++) {
+    secs += Number(parts[i]) * Math.pow(60, i);
+  }
+  return secs;
+};
+
+const handleTimeChange = (val: string, setter: (val: string) => void) => {
+  let numbers = val.replace(/\D/g, '');
+  if (numbers.length > 6) numbers = numbers.slice(0, 6);
+  
+  let formatted = '';
+  if (numbers.length > 0) formatted += numbers.slice(0, 2);
+  if (numbers.length > 2) formatted += ':' + numbers.slice(2, 4);
+  if (numbers.length > 4) formatted += ':' + numbers.slice(4, 6);
+  
+  setter(formatted);
+};
+
 export default function App() {
   const [url, setUrl] = useState<string>('');
   const [mediaType, setMediaType] = useState<MediaType>('video');
@@ -131,6 +154,21 @@ export default function App() {
   };
 
   const handleDownload = async () => {
+    if (startTime || endTime) {
+      const startSecs = parseToSeconds(startTime);
+      const endSecs = endTime ? parseToSeconds(endTime) : Infinity;
+      const durationSecs = info?.duration ? parseToSeconds(String(info.duration)) : Infinity;
+
+      if (startSecs >= endSecs) {
+        setError('Start time must be before end time.');
+        return;
+      }
+      if (startSecs >= durationSecs) {
+        setError('Start time cannot be past the end of the video.');
+        return;
+      }
+    }
+
     setIsDownloading(true);
     setDownloadProgress('Preparing...');
     setError('');
@@ -346,9 +384,9 @@ export default function App() {
               <input
                 type="text"
                 className="input"
-                placeholder="00:00:00 or seconds"
+                placeholder="00:00:00"
                 value={startTime}
-                onChange={e => setStartTime(e.target.value)}
+                onChange={e => handleTimeChange(e.target.value, setStartTime)}
                 disabled={isDownloading}
                 style={{ width: '100%' }}
               />
@@ -358,9 +396,9 @@ export default function App() {
               <input
                 type="text"
                 className="input"
-                placeholder="00:00:00 or seconds"
+                placeholder="00:00:00"
                 value={endTime}
-                onChange={e => setEndTime(e.target.value)}
+                onChange={e => handleTimeChange(e.target.value, setEndTime)}
                 disabled={isDownloading}
                 style={{ width: '100%' }}
               />
