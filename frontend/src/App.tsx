@@ -42,6 +42,9 @@ const handleTimeChange = (val: string, setter: (val: string) => void) => {
   setter(formatted);
 };
 
+const PLAYLIST_VIDEO_FORMATS = [2160, 1440, 1080, 720, 480, 360];
+const PLAYLIST_AUDIO_FORMATS = [320, 256, 192, 128];
+
 export default function App() {
   const [url, setUrl] = useState<string>('');
   const [mediaType, setMediaType] = useState<MediaType>('video');
@@ -59,6 +62,16 @@ export default function App() {
   const [downloadProgress, setDownloadProgress] = useState<string>('');
 
   useEffect(() => {
+    const activePl = localStorage.getItem('activePlaylist');
+    if (activePl) {
+      try {
+        const data = JSON.parse(activePl);
+        runPlaylistDownload(data.entries, data.currentIndex, data.options, data.taskId);
+      } catch (e) {
+        localStorage.removeItem('activePlaylist');
+      }
+    }
+
     const active = localStorage.getItem('activeDownload');
     if (active) {
       try {
@@ -139,11 +152,16 @@ export default function App() {
       const data: MediaInfo = await res.json();
       setInfo(data);
       
-      if (data.videoFormats && data.videoFormats.length > 0) {
-        setVideoRes(data.videoFormats[0].toString());
-      }
-      if (data.audioFormats && data.audioFormats.length > 0) {
-        setAudioKbps(data.audioFormats[0].toString());
+      if (data.isPlaylist) {
+        setVideoRes(PLAYLIST_VIDEO_FORMATS[2].toString()); // default 1080p
+        setAudioKbps(PLAYLIST_AUDIO_FORMATS[0].toString()); // default 320
+      } else {
+        if (data.videoFormats && data.videoFormats.length > 0) {
+          setVideoRes(data.videoFormats[0].toString());
+        }
+        if (data.audioFormats && data.audioFormats.length > 0) {
+          setAudioKbps(data.audioFormats[0].toString());
+        }
       }
     } catch (err) {
       if (err instanceof Error) {
@@ -154,6 +172,77 @@ export default function App() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const runPlaylistDownload = async (entries: any[], startIndex: number, options: any, existingTaskId?: string) => {
+    setIsDownloading(true);
+    let currentTaskId = existingTaskId;
+    
+    for (let i = startIndex; i < entries.length; i++) {
+      const entry = entries[i];
+      
+      if (!currentTaskId) {
+        setDownloadProgress(`Preparing ${i + 1}/${entries.length}: ${entry.title.substring(0, 30)}...`);
+        try {
+          const res = await fetch('/udownloader/api/prepare', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+              url: entry.url, mediaType: options.mediaType, ext: options.ext, videoRes: options.videoRes, audioKbps: options.audioKbps, title: entry.title
+            })
+          });
+          if (!res.ok) throw new Error('Failed');
+          const data = await res.json();
+          currentTaskId = data.taskId;
+        } catch (e) {
+          continue; // skip on error
+        }
+      }
+
+      localStorage.setItem('activePlaylist', JSON.stringify({
+        entries, currentIndex: i, options, taskId: currentTaskId
+      }));
+
+      await new Promise<void>((resolve) => {
+        const interval = setInterval(async () => {
+          try {
+            const statusRes = await fetch(`/udownloader/api/status/${currentTaskId}`);
+            if (statusRes.ok) {
+              const data = await statusRes.json();
+              setDownloadProgress(`[${i + 1}/${entries.length}] ${data.progress}`);
+              
+              if (data.status === 'done') {
+                clearInterval(interval);
+                
+                const a = document.createElement('a');
+                a.href = `/udownloader/api/download/${currentTaskId}`;
+                a.download = '';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                
+                currentTaskId = undefined;
+                setTimeout(resolve, 1500);
+              } else if (data.status === 'error') {
+                clearInterval(interval);
+                currentTaskId = undefined;
+                resolve();
+              }
+            } else if (statusRes.status === 404) {
+              clearInterval(interval);
+              currentTaskId = undefined;
+              i--; // retry this index
+              resolve();
+            }
+          } catch (e) {
+          }
+        }, 1000);
+      });
+    }
+    
+    setIsDownloading(false);
+    setDownloadProgress('');
+    localStorage.removeItem('activePlaylist');
   };
 
   const handleDownload = async () => {
@@ -178,57 +267,7 @@ export default function App() {
 
     try {
       if (info?.isPlaylist && info?.entries && info.entries.length > 0) {
-        for (let i = 0; i < info.entries.length; i++) {
-          const entry = info.entries[i];
-          setDownloadProgress(`Preparing ${i + 1}/${info.entries.length}: ${entry.title.substring(0, 30)}...`);
-
-          const res = await fetch('/udownloader/api/prepare', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-              url: entry.url, mediaType, ext, videoRes, audioKbps, title: entry.title
-            })
-          });
-
-          if (!res.ok) throw new Error('Failed to prepare download for ' + entry.title);
-          const { taskId } = await res.json();
-
-          await new Promise<void>((resolve) => {
-            const interval = setInterval(async () => {
-              try {
-                const statusRes = await fetch(`/udownloader/api/status/${taskId}`);
-                if (statusRes.ok) {
-                  const data = await statusRes.json();
-                  setDownloadProgress(`[${i + 1}/${info.entries!.length}] ${data.progress}`);
-                  
-                  if (data.status === 'done') {
-                    clearInterval(interval);
-                    
-                    // Create a hidden anchor to trigger download without replacing window location
-                    // which could abort the loop or next requests in some browsers
-                    const a = document.createElement('a');
-                    a.href = `/udownloader/api/download/${taskId}`;
-                    a.download = ''; // Browser will use Content-Disposition header
-                    document.body.appendChild(a);
-                    a.click();
-                    document.body.removeChild(a);
-                    
-                    // Wait a bit before next file to ensure browser handles it smoothly
-                    setTimeout(resolve, 1500);
-                  } else if (data.status === 'error') {
-                    clearInterval(interval);
-                    // Just skip to next if one fails
-                    resolve();
-                  }
-                }
-              } catch (e) {
-                // Ignore polling errors
-              }
-            }, 1000);
-          });
-        }
-        setIsDownloading(false);
-        setDownloadProgress('');
+        runPlaylistDownload(info.entries, 0, { mediaType, ext, videoRes, audioKbps });
       } else {
         const res = await fetch('/udownloader/api/prepare', {
           method: 'POST',
@@ -404,40 +443,32 @@ export default function App() {
 
             <div className="options-group" style={{ flex: 1 }}>
               <h4>Quality Selection</h4>
-              {info.isPlaylist ? (
-                <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--text-secondary)', padding: '12px 0' }}>Auto (Multiple Files)</p>
-              ) : mediaType === 'video' ? (
-                info.videoFormats && info.videoFormats.length > 0 ? (
-                  <select 
-                    className="input" 
-                    value={videoRes} 
-                    disabled={isDownloading}
-                    onChange={e => setVideoRes(e.target.value)}
-                    style={{ width: '100%', cursor: 'pointer' }}
-                  >
-                    {info.videoFormats.map(res => (
-                      <option key={res} value={res}>{res}p</option>
-                    ))}
-                  </select>
-                ) : (
-                  <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--text-secondary)', padding: '12px 0' }}>Best available</p>
-                )
+              {mediaType === 'video' ? (
+                <select 
+                  className="input" 
+                  value={videoRes} 
+                  disabled={isDownloading}
+                  onChange={e => setVideoRes(e.target.value)}
+                  style={{ width: '100%', cursor: 'pointer' }}
+                >
+                  <option value="">Best available</option>
+                  {(info.isPlaylist ? PLAYLIST_VIDEO_FORMATS : (info.videoFormats || [])).map(res => (
+                    <option key={res} value={res}>{res}p {info.isPlaylist ? '(Max)' : ''}</option>
+                  ))}
+                </select>
               ) : (
-                info.audioFormats && info.audioFormats.length > 0 ? (
-                  <select 
-                    className="input" 
-                    value={audioKbps} 
-                    disabled={isDownloading}
-                    onChange={e => setAudioKbps(e.target.value)}
-                    style={{ width: '100%', cursor: 'pointer' }}
-                  >
-                    {info.audioFormats.map(kbps => (
-                      <option key={kbps} value={kbps}>{kbps} kbps</option>
-                    ))}
-                  </select>
-                ) : (
-                  <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--text-secondary)', padding: '12px 0' }}>Best available</p>
-                )
+                <select 
+                  className="input" 
+                  value={audioKbps} 
+                  disabled={isDownloading}
+                  onChange={e => setAudioKbps(e.target.value)}
+                  style={{ width: '100%', cursor: 'pointer' }}
+                >
+                  <option value="">Best available</option>
+                  {(info.isPlaylist ? PLAYLIST_AUDIO_FORMATS : (info.audioFormats || [])).map(kbps => (
+                    <option key={kbps} value={kbps}>{kbps} kbps {info.isPlaylist ? '(Max)' : ''}</option>
+                  ))}
+                </select>
               )}
             </div>
           </div>
