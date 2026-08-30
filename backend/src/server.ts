@@ -97,7 +97,7 @@ app.post('/api/prepare', (req: Request, res: Response) => {
   if (startTime || endTime) {
     const start = startTime || '0';
     const end = endTime || 'inf';
-    args.push('--download-sections', `*${start}-${end}`);
+    args.push('--download-sections', `*${start}-${end}`, '--force-keyframes-at-cuts');
   }
 
   const ytdlp = spawn('yt-dlp', args);
