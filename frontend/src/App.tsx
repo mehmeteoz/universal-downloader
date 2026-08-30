@@ -66,7 +66,14 @@ export default function App() {
     if (activePl) {
       try {
         const data = JSON.parse(activePl);
-        runPlaylistDownload(data.entries, data.currentIndex, data.options, data.taskId);
+        if (data.url) setUrl(data.url);
+        if (data.info) setInfo(data.info);
+        if (data.options?.mediaType) setMediaType(data.options.mediaType);
+        if (data.options?.ext) setExt(data.options.ext);
+        if (data.options?.videoRes) setVideoRes(data.options.videoRes);
+        if (data.options?.audioKbps) setAudioKbps(data.options.audioKbps);
+        
+        runPlaylistDownload(data.entries, data.currentIndex, data.options, data.taskId, data.url, data.info);
       } catch (e) {
         localStorage.removeItem('activePlaylist');
       }
@@ -174,7 +181,7 @@ export default function App() {
     }
   };
 
-  const runPlaylistDownload = async (entries: any[], startIndex: number, options: any, existingTaskId?: string) => {
+  const runPlaylistDownload = async (entries: any[], startIndex: number, options: any, existingTaskId?: string, playlistUrl?: string, playlistInfo?: MediaInfo) => {
     setIsDownloading(true);
     let currentTaskId = existingTaskId;
     
@@ -200,7 +207,7 @@ export default function App() {
       }
 
       localStorage.setItem('activePlaylist', JSON.stringify({
-        entries, currentIndex: i, options, taskId: currentTaskId
+        entries, currentIndex: i, options, taskId: currentTaskId, url: playlistUrl, info: playlistInfo
       }));
 
       await new Promise<void>((resolve) => {
@@ -267,7 +274,7 @@ export default function App() {
 
     try {
       if (info?.isPlaylist && info?.entries && info.entries.length > 0) {
-        runPlaylistDownload(info.entries, 0, { mediaType, ext, videoRes, audioKbps });
+        runPlaylistDownload(info.entries, 0, { mediaType, ext, videoRes, audioKbps }, undefined, url, info);
       } else {
         const res = await fetch('/udownloader/api/prepare', {
           method: 'POST',
