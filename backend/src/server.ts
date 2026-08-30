@@ -19,7 +19,7 @@ app.post('/api/info', (req: Request<{}, {}, InfoRequestBody>, res: Response) => 
   }
 
   // Use a max buffer size in case of huge JSON outputs
-  const ytdlp = spawn('yt-dlp', ['--dump-json', '--no-warnings', url]);
+  const ytdlp = spawn('yt-dlp', ['--dump-single-json', '--flat-playlist', '--no-warnings', url]);
   let output = '';
   let errorOutput = '';
 
@@ -34,6 +34,21 @@ app.post('/api/info', (req: Request<{}, {}, InfoRequestBody>, res: Response) => 
     try {
       const info = JSON.parse(output);
       
+      if (info._type === 'playlist' || info.playlist_count > 1 || info.entries) {
+        res.json({
+          isPlaylist: true,
+          playlistCount: info.playlist_count || info.entries?.length || 0,
+          entries: info.entries?.map((e: any) => ({ url: e.url, title: e.title })) || [],
+          title: info.title || 'Playlist',
+          thumbnail: info.thumbnails?.[0]?.url || info.entries?.[0]?.thumbnails?.[0]?.url || '',
+          duration: null,
+          extractor: info.extractor_key,
+          videoFormats: [],
+          audioFormats: []
+        });
+        return;
+      }
+
       const videoFormats = Array.from(new Set(
         (info.formats || [])
           .filter((f: any) => f.vcodec !== 'none' && f.height)
@@ -47,6 +62,7 @@ app.post('/api/info', (req: Request<{}, {}, InfoRequestBody>, res: Response) => 
       )).sort((a: any, b: any) => b - a);
 
       res.json({
+        isPlaylist: false,
         title: info.title,
         thumbnail: info.thumbnail,
         duration: info.duration_string || info.duration,
@@ -107,7 +123,6 @@ app.post('/api/prepare', (req: Request, res: Response) => {
     const task = tasks.get(taskId);
     if (!task) return;
     
-    // Parse progress like: [download]  50.0% of ~10.00MiB
     const match = output.match(/\[download\]\s+([\d\.]+)%/);
     if (match) {
       task.progress = `Downloading... ${match[1]}%`;

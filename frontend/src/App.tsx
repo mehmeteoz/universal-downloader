@@ -9,6 +9,9 @@ interface MediaInfo {
   extractor: string;
   videoFormats: number[];
   audioFormats: number[];
+  isPlaylist?: boolean;
+  playlistCount?: number;
+  entries?: {url: string, title: string}[];
 }
 
 type MediaType = 'video' | 'audio';
@@ -174,46 +177,100 @@ export default function App() {
     setError('');
 
     try {
-      const res = await fetch('/udownloader/api/prepare', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          url, mediaType, ext, videoRes, audioKbps, title: info?.title, startTime, endTime
-        })
-      });
+      if (info?.isPlaylist && info?.entries && info.entries.length > 0) {
+        for (let i = 0; i < info.entries.length; i++) {
+          const entry = info.entries[i];
+          setDownloadProgress(`Preparing ${i + 1}/${info.entries.length}: ${entry.title.substring(0, 30)}...`);
 
-      if (!res.ok) throw new Error('Failed to prepare download');
-      const { taskId } = await res.json();
+          const res = await fetch('/udownloader/api/prepare', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+              url: entry.url, mediaType, ext, videoRes, audioKbps, title: entry.title
+            })
+          });
 
-      localStorage.setItem('activeDownload', JSON.stringify({
-        taskId, url, mediaType, ext, videoRes, audioKbps, startTime, endTime
-      }));
+          if (!res.ok) throw new Error('Failed to prepare download for ' + entry.title);
+          const { taskId } = await res.json();
 
-      const interval = setInterval(async () => {
-        try {
-          const statusRes = await fetch(`/udownloader/api/status/${taskId}`);
-          if (statusRes.ok) {
-            const data = await statusRes.json();
-            setDownloadProgress(data.progress);
-            
-            if (data.status === 'done') {
-              clearInterval(interval);
-              setIsDownloading(false);
-              setDownloadProgress('');
-              localStorage.removeItem('activeDownload');
-              window.location.href = `/udownloader/api/download/${taskId}`;
-            } else if (data.status === 'error') {
-              clearInterval(interval);
-              setIsDownloading(false);
-              setDownloadProgress('');
-              setError('Server failed to process the media.');
-              localStorage.removeItem('activeDownload');
-            }
-          }
-        } catch (e) {
-          // Ignore polling errors
+          await new Promise<void>((resolve) => {
+            const interval = setInterval(async () => {
+              try {
+                const statusRes = await fetch(`/udownloader/api/status/${taskId}`);
+                if (statusRes.ok) {
+                  const data = await statusRes.json();
+                  setDownloadProgress(`[${i + 1}/${info.entries!.length}] ${data.progress}`);
+                  
+                  if (data.status === 'done') {
+                    clearInterval(interval);
+                    
+                    // Create a hidden anchor to trigger download without replacing window location
+                    // which could abort the loop or next requests in some browsers
+                    const a = document.createElement('a');
+                    a.href = `/udownloader/api/download/${taskId}`;
+                    a.download = ''; // Browser will use Content-Disposition header
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    
+                    // Wait a bit before next file to ensure browser handles it smoothly
+                    setTimeout(resolve, 1500);
+                  } else if (data.status === 'error') {
+                    clearInterval(interval);
+                    // Just skip to next if one fails
+                    resolve();
+                  }
+                }
+              } catch (e) {
+                // Ignore polling errors
+              }
+            }, 1000);
+          });
         }
-      }, 1000);
+        setIsDownloading(false);
+        setDownloadProgress('');
+      } else {
+        const res = await fetch('/udownloader/api/prepare', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            url, mediaType, ext, videoRes, audioKbps, title: info?.title, startTime, endTime
+          })
+        });
+
+        if (!res.ok) throw new Error('Failed to prepare download');
+        const { taskId } = await res.json();
+
+        localStorage.setItem('activeDownload', JSON.stringify({
+          taskId, url, mediaType, ext, videoRes, audioKbps, startTime, endTime
+        }));
+
+        const interval = setInterval(async () => {
+          try {
+            const statusRes = await fetch(`/udownloader/api/status/${taskId}`);
+            if (statusRes.ok) {
+              const data = await statusRes.json();
+              setDownloadProgress(data.progress);
+              
+              if (data.status === 'done') {
+                clearInterval(interval);
+                setIsDownloading(false);
+                setDownloadProgress('');
+                localStorage.removeItem('activeDownload');
+                window.location.href = `/udownloader/api/download/${taskId}`;
+              } else if (data.status === 'error') {
+                clearInterval(interval);
+                setIsDownloading(false);
+                setDownloadProgress('');
+                setError('Server failed to process the media.');
+                localStorage.removeItem('activeDownload');
+              }
+            }
+          } catch (e) {
+            // Ignore polling errors
+          }
+        }, 1000);
+      }
     } catch (err) {
       setIsDownloading(false);
       setDownloadProgress('');
@@ -281,12 +338,17 @@ export default function App() {
               <h3>{info.title}</h3>
               <p>
                 <span style={{ textTransform: 'capitalize', fontWeight: 600, color: '#3b82f6' }}>{info.extractor}</span>
-                {info.duration && (
+                {info.isPlaylist ? (
+                  <>
+                    <span style={{ margin: '0 6px' }}>•</span>
+                    <strong>{info.playlistCount} items</strong>
+                  </>
+                ) : info.duration ? (
                   <>
                     <span style={{ margin: '0 6px' }}>•</span>
                     <Clock size={14} style={{ marginRight: 4 }} /> {info.duration}
                   </>
-                )}
+                ) : null}
               </p>
             </div>
           </div>
@@ -342,7 +404,9 @@ export default function App() {
 
             <div className="options-group" style={{ flex: 1 }}>
               <h4>Quality Selection</h4>
-              {mediaType === 'video' ? (
+              {info.isPlaylist ? (
+                <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--text-secondary)', padding: '12px 0' }}>Auto (Multiple Files)</p>
+              ) : mediaType === 'video' ? (
                 info.videoFormats && info.videoFormats.length > 0 ? (
                   <select 
                     className="input" 
@@ -378,32 +442,34 @@ export default function App() {
             </div>
           </div>
 
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px' }}>
-            <div className="options-group" style={{ flex: 1 }}>
-              <h4>Start Time (Optional)</h4>
-              <input
-                type="text"
-                className="input"
-                placeholder="00:00:00"
-                value={startTime}
-                onChange={e => handleTimeChange(e.target.value, setStartTime)}
-                disabled={isDownloading}
-                style={{ width: '100%' }}
-              />
+          {!info.isPlaylist && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px' }}>
+              <div className="options-group" style={{ flex: 1 }}>
+                <h4>Start Time (Optional)</h4>
+                <input
+                  type="text"
+                  className="input"
+                  placeholder="00:00:00"
+                  value={startTime}
+                  onChange={e => handleTimeChange(e.target.value, setStartTime)}
+                  disabled={isDownloading}
+                  style={{ width: '100%' }}
+                />
+              </div>
+              <div className="options-group" style={{ flex: 1 }}>
+                <h4>End Time (Optional)</h4>
+                <input
+                  type="text"
+                  className="input"
+                  placeholder="00:00:00"
+                  value={endTime}
+                  onChange={e => handleTimeChange(e.target.value, setEndTime)}
+                  disabled={isDownloading}
+                  style={{ width: '100%' }}
+                />
+              </div>
             </div>
-            <div className="options-group" style={{ flex: 1 }}>
-              <h4>End Time (Optional)</h4>
-              <input
-                type="text"
-                className="input"
-                placeholder="00:00:00"
-                value={endTime}
-                onChange={e => handleTimeChange(e.target.value, setEndTime)}
-                disabled={isDownloading}
-                style={{ width: '100%' }}
-              />
-            </div>
-          </div>
+          )}
 
           <div className="actions">
             {(() => {
