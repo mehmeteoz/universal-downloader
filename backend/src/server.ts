@@ -10,6 +10,9 @@ interface InfoRequestBody {
   url: string;
 }
 
+const MAX_FILESIZE_FLAG = '7G';
+const MAX_FILESIZE_MSG = '7GB';
+
 // 1. Fetch metadata
 app.post('/api/info', (req: Request<{}, {}, InfoRequestBody>, res: Response) => {
   const { url } = req.body;
@@ -101,13 +104,13 @@ app.post('/api/prepare', (req: Request, res: Response) => {
 
   if (mediaType === 'audio') {
     const audioQuality = audioKbps ? `${audioKbps}K` : '0';
-    args = [ '--newline', '--embed-metadata', '--embed-thumbnail', '-x', '--audio-format', ext, '--audio-quality', audioQuality, '-o', tmpFile, url ];
+    args = [ '--newline', '--max-filesize', MAX_FILESIZE_FLAG, '--embed-metadata', '--embed-thumbnail', '-x', '--audio-format', ext, '--audio-quality', audioQuality, '-o', tmpFile, url ];
   } else {
     let videoFormat = `bestvideo[ext=${ext}]+bestaudio/best[ext=${ext}]/best`;
     if (videoRes) {
       videoFormat = `bestvideo[ext=${ext}][height<=${videoRes}]+bestaudio/best[ext=${ext}][height<=${videoRes}]/best`;
     }
-    args = [ '--newline', '--embed-metadata', '--embed-thumbnail', '-f', videoFormat, '--merge-output-format', ext, '-o', tmpFile, url ];
+    args = [ '--newline', '--max-filesize', MAX_FILESIZE_FLAG, '--embed-metadata', '--embed-thumbnail', '-f', videoFormat, '--merge-output-format', ext, '-o', tmpFile, url ];
   }
 
   if (startTime || endTime) {
@@ -123,6 +126,12 @@ app.post('/api/prepare', (req: Request, res: Response) => {
     const task = tasks.get(taskId);
     if (!task) return;
     
+    if (output.includes('larger than max-filesize') || output.includes('File is larger than')) {
+      task.status = 'error';
+      task.progress = `Error: File exceeds ${MAX_FILESIZE_MSG} limit.`;
+      return;
+    }
+
     const match = output.match(/\[download\]\s+([\d\.]+)%/);
     if (match) {
       task.progress = `Downloading... ${match[1]}%`;
@@ -134,12 +143,22 @@ app.post('/api/prepare', (req: Request, res: Response) => {
   });
 
   ytdlp.stderr.on('data', (data: Buffer) => {
-    console.error(`yt-dlp stderr: ${data}`);
+    const output = data.toString();
+    const task = tasks.get(taskId);
+    if (task && (output.includes('larger than max-filesize') || output.includes('File is larger than'))) {
+      task.status = 'error';
+      task.progress = `Error: File exceeds ${MAX_FILESIZE_MSG} limit.`;
+    }
+    console.error(`yt-dlp stderr: ${output}`);
   });
 
   ytdlp.on('close', (code) => {
     const task = tasks.get(taskId);
     if (!task) return;
+
+    if (task.status === 'error' && task.progress.includes(MAX_FILESIZE_MSG)) {
+      return; // Already set by stdout/stderr listener
+    }
 
     if (code === 0) {
       let filename = mediaType === 'audio' ? `audio.${ext}` : `video.${ext}`;

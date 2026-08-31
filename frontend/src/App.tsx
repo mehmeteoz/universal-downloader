@@ -119,7 +119,7 @@ export default function App() {
                 clearInterval(interval);
                 setIsDownloading(false);
                 setDownloadProgress('');
-                setError('Server failed to process the media.');
+                setError(statusData.progress || 'Server failed to process the media.');
                 localStorage.removeItem('activeDownload');
               }
             } else if (statusRes.status === 404) {
@@ -308,7 +308,7 @@ export default function App() {
                 clearInterval(interval);
                 setIsDownloading(false);
                 setDownloadProgress('');
-                setError('Server failed to process the media.');
+                setError(data.progress || 'Server failed to process the media.');
                 localStorage.removeItem('activeDownload');
               }
             }
