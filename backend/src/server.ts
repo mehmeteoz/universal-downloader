@@ -106,9 +106,10 @@ app.post('/api/prepare', (req: Request, res: Response) => {
     const audioQuality = audioKbps ? `${audioKbps}K` : '0';
     args = [ '--newline', '--max-filesize', MAX_FILESIZE_FLAG, '--embed-metadata', '--embed-thumbnail', '-x', '--audio-format', ext, '--audio-quality', audioQuality, '-o', tmpFile, url ];
   } else {
-    let videoFormat = `bestvideo[ext=${ext}]+bestaudio/best[ext=${ext}]/best`;
+    const audioExt = ext === 'mp4' ? 'm4a' : ext;
+    let videoFormat = `bestvideo[ext=${ext}]+bestaudio[ext=${audioExt}]/best[ext=${ext}]/best`;
     if (videoRes) {
-      videoFormat = `bestvideo[ext=${ext}][height<=${videoRes}]+bestaudio/best[ext=${ext}][height<=${videoRes}]/best`;
+      videoFormat = `bestvideo[ext=${ext}][height<=${videoRes}]+bestaudio[ext=${audioExt}]/best[ext=${ext}][height<=${videoRes}]/best`;
     }
     args = [ '--newline', '--max-filesize', MAX_FILESIZE_FLAG, '--embed-metadata', '--embed-thumbnail', '-f', videoFormat, '--merge-output-format', ext, '-o', tmpFile, url ];
   }
