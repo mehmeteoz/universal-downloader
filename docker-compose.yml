@@ -20,6 +20,6 @@ services:
     container_name: media-downloader-frontend
     restart: unless-stopped
     ports:
-      - "80:80"
+      - "${FRONTEND_PORT:-8080}:80"
     depends_on:
       - backend

@@ -35,8 +35,9 @@ export function initAnalytics(): void {
 
   // 2. Setup dataLayer and window.gtag
   window.dataLayer = window.dataLayer || [];
-  function gtag(...args: any[]) {
-    window.dataLayer.push(args);
+  function gtag(..._args: any[]) {
+    // Google's gtag.js library specifically inspects the Arguments object
+    window.dataLayer.push(arguments);
   }
   window.gtag = gtag;
 
