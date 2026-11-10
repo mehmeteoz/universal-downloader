@@ -159,17 +159,8 @@ export default function App() {
       const data: MediaInfo = await res.json();
       setInfo(data);
       
-      if (data.isPlaylist) {
-        setVideoRes(PLAYLIST_VIDEO_FORMATS[2].toString()); // default 1080p
-        setAudioKbps(PLAYLIST_AUDIO_FORMATS[0].toString()); // default 320
-      } else {
-        if (data.videoFormats && data.videoFormats.length > 0) {
-          setVideoRes(data.videoFormats[0].toString());
-        }
-        if (data.audioFormats && data.audioFormats.length > 0) {
-          setAudioKbps(data.audioFormats[0].toString());
-        }
-      }
+      setVideoRes('');
+      setAudioKbps('');
     } catch (err) {
       if (err instanceof Error) {
         setError(err.message);
