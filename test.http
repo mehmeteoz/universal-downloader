@@ -1,0 +1,7 @@
+POST http://localhost/udownloader/api/info
+Content-Type: application/json
+url: https://www.youtube.com/watch?v=lW8fvqG9O0c
+
+{
+  "url": "https://www.youtube.com/watch?v=lW8fvqG9O0c"
+}
