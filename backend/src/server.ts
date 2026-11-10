@@ -202,5 +202,26 @@ app.get('/api/download/:taskId', (req: Request, res: Response) => {
   });
 });
 
+function updateYtdlp() {
+  try {
+    console.log('[yt-dlp] Checking for updates...');
+    const updater = spawn('yt-dlp', ['-U']);
+    updater.on('error', (err) => {
+      console.warn('[yt-dlp] Auto-update check skipped:', err.message);
+    });
+    updater.stdout.on('data', (d) => console.log(`[yt-dlp-update] ${d.toString().trim()}`));
+    updater.stderr.on('data', (d) => console.error(`[yt-dlp-update-err] ${d.toString().trim()}`));
+    updater.on('close', (code) => {
+      console.log(`[yt-dlp] Check/update finished with code ${code}`);
+    });
+  } catch (err: any) {
+    console.warn('[yt-dlp] Auto-update check skipped:', err.message);
+  }
+}
+
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`Backend running on port ${PORT}`));
+app.listen(PORT, () => {
+  console.log(`Backend running on port ${PORT}`);
+  updateYtdlp();
+  setInterval(updateYtdlp, 1000 * 60 * 60 * 12); // Check for yt-dlp updates every 12 hours
+});
